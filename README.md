@@ -10,6 +10,12 @@
 - 自动探测总页数
 - 导出 `xlsx`
 - 同步生成 `.validation.json`
+- 同步生成 `.progress.json`
+- 同步生成 `.failed-pages.json`
+- 终端文本进度条，展示阶段 / 页码 / 成功重试失败 / 累计记录数
+- 支持按失败页补抓：`--retry-failed-pages`
+- 支持把补抓结果合并进旧结果：`--merge-into`
+- 支持合并模式：`--merge-mode keep-extra|strict`
 - 当前支持字段：
   - 用户名
   - 用户标签
@@ -79,10 +85,12 @@ DCD口碑_车型_日期.xlsx
 DCD口碑_风云X3_2026-03-27.xlsx
 ```
 
-同时会生成同名校验文件：
+同时会生成这些同名侧产物：
 
 ```text
 DCD口碑_风云X3_2026-03-27.validation.json
+DCD口碑_风云X3_2026-03-27.progress.json
+DCD口碑_风云X3_2026-03-27.failed-pages.json
 ```
 
 ## 数据来源说明
@@ -107,6 +115,48 @@ DCD口碑_风云X3_2026-03-27.validation.json
 1. 在独立仓库目录修改并提交
 2. push 到 GitHub
 3. 回 workspace 根目录提交 submodule 指针更新
+
+## 增强用法
+
+### 进度展示
+
+运行时会输出类似：
+
+```text
+抓取页面 [########................] 总体 8/21 (38%) | 页码 8/20 | ok 7 retry 0 fail 0 rows 134 | 第 8 页
+```
+
+### 失败页补抓
+
+```bash
+python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
+  --series-id 25544 \
+  --retry-failed-pages ./DCD口碑_xxx.failed-pages.json
+```
+
+### 合并进旧结果
+
+```bash
+python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
+  --series-id 25544 \
+  --retry-failed-pages ./DCD口碑_xxx.failed-pages.json \
+  --merge-into ./DCD口碑_旧版本.xlsx \
+  --output ./DCD口碑_修复版.xlsx
+```
+
+### 严格合并模式
+
+```bash
+python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
+  --series-id 25544 \
+  --retry-failed-pages ./DCD口碑_xxx.failed-pages.json \
+  --merge-into ./DCD口碑_旧版本.xlsx \
+  --merge-mode strict \
+  --output ./DCD口碑_修复版.xlsx
+```
+
+- `keep-extra`：默认，保留旧表中本轮未触及的记录
+- `strict`：只保留本轮新结果，不保留历史残留
 
 ## 当前限制
 
@@ -138,13 +188,14 @@ DCD口碑_风云X3_2026-03-27.validation.json
 
 ### v0.2.0
 
-计划补充：
+已完成：
 
-- 点赞数
-- 评论数
-- 图片数
-- 用户 ID
-- 更清晰的字段映射说明
+- 文本进度条
+- `.progress.json` 输出
+- `.failed-pages.json` 输出
+- 失败页补抓
+- 合并旧结果
+- `keep-extra / strict` 两种 merge 模式
 
 ### v0.3.0
 

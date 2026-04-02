@@ -156,6 +156,15 @@ description: 从懂车帝口碑页批量采集指定车型的用户评价全文�
 - 支持从页面内嵌结构化数据提取字段
 - 支持自动探测总页数
 - 默认文件名为 `DCD口碑_车型_日期.xlsx`
+- 运行时默认输出文本进度条，展示阶段、页码进度、成功/重试/失败页数、累计记录数
+- 默认额外生成同名 `.progress.json`，便于外部读取实时进度
+- 默认额外生成同名 `.failed-pages.json`，集中记录失败页和失败原因，方便补抓
+- 支持通过 `--retry-failed-pages` 直接读取失败页并补抓
+- 支持通过 `--merge-into` 将补抓结果按 `来源链接` 合并进已有 Excel，覆盖旧记录
+- 支持通过 `--merge-mode keep-extra|strict` 控制是否保留旧表中本轮未触及的历史记录
+- 推荐合并后输出到新文件（如 `_修复版.xlsx`），避免直接覆盖原始产物
+- 可通过 `--progress-file` 自定义进度文件路径
+- 可通过 `--quiet` 关闭终端进度输出，仅保留 `.progress.json`
 
 示例：
 
@@ -165,10 +174,72 @@ python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
   --start-page 1
 ```
 
+运行时会输出类似：
+
+```text
+抓取页面 [########................] 总体 8/21 (38%) | 页码 8/20 | ok 7 retry 0 fail 0 rows 134 | 第 8 页
+```
+
 或：
 
 ```bash
 python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
   --url 'https://www.dongchedi.com/auto/series/score/25544-x-x-x-x-x' \
   --start-page 1
+```
+
+`.progress.json` 会包含：
+
+- `overall.current / total / percent`
+- `current_page`
+- `page_range`
+- `output_path`
+- `validation_path`
+- `failed_pages`
+
+如需按失败页补抓：
+
+```bash
+python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
+  --series-id 25544 \
+  --retry-failed-pages ./DCD口碑_xxx.failed-pages.json
+```
+
+如需把补抓结果合并进已有 Excel：
+
+```bash
+python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
+  --series-id 25544 \
+  --retry-failed-pages ./DCD口碑_xxx.failed-pages.json \
+  --merge-into ./DCD口碑_小米SU7_2026-03-27.xlsx \
+  --output ./DCD口碑_小米SU7_2026-03-27_修复版.xlsx
+```
+
+如需严格模式（不保留旧表中本轮未触及的历史记录）：
+
+```bash
+python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
+  --series-id 25544 \
+  --retry-failed-pages ./DCD口碑_xxx.failed-pages.json \
+  --merge-into ./DCD口碑_小米SU7_2026-03-27.xlsx \
+  --merge-mode strict \
+  --output ./DCD口碑_小米SU7_2026-03-27_修复版.xlsx
+```
+
+如需静默运行，只保留 progress 文件：
+
+```bash
+python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
+  --series-id 25544 \
+  --start-page 1 \
+  --quiet
+```
+
+如需自定义 progress 文件：
+
+```bash
+python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
+  --series-id 25544 \
+  --start-page 1 \
+  --progress-file ./dcd.progress.json
 ```
