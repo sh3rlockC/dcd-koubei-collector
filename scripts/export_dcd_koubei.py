@@ -15,22 +15,40 @@
 """
 
 import argparse
+import base64
 import datetime as dt
+import hashlib
+import hmac
 import json
 import re
 import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+from urllib import request as urllib_request
 
 
 class ProgressTracker:
-    def __init__(self, label: str, progress_path: Optional[Path] = None, quiet: bool = False):
+    def __init__(
+        self,
+        label: str,
+        progress_path: Optional[Path] = None,
+        quiet: bool = False,
+        progress_webhook: Optional[str] = None,
+        feishu_webhook: Optional[str] = None,
+        feishu_secret: Optional[str] = None,
+    ):
         self.label = label
         self.progress_path = progress_path
         self.quiet = quiet
+        self.progress_webhook = progress_webhook
+        self.feishu_webhook = feishu_webhook
+        self.feishu_secret = feishu_secret
+        self.last_webhook_percent = None
+        self.last_webhook_stage = None
         self.state: Dict[str, Any] = {
             'label': label,
+            'series_name': '',
             'stage': 'init',
             'current': 0,
             'total': 0,
@@ -58,7 +76,31 @@ class ProgressTracker:
     def emit(self):
         self.state['updated_at'] = dt.datetime.now().isoformat(timespec='seconds')
         if self.progress_path:
-            self.progress_path.write_text(json.dumps(self.state, ensure_ascii=False, indent=2), encoding='utf-8')
+            write_json_atomic(self.progress_path, self.state)
+        percent = int(self.state.get('percent', 0))
+        stage = self.state.get('stage', '')
+        message = self.state.get('message', '')
+        should_emit_webhook = (
+            percent != self.last_webhook_percent
+            or stage != self.last_webhook_stage
+            or message in {'准备开始抓取懂车帝口碑', '写入 Excel 与 validation.json', '导出完成'}
+        )
+        if should_emit_webhook:
+            self.last_webhook_percent = percent
+            self.last_webhook_stage = stage
+            payload = self._build_webhook_payload()
+            if self.progress_webhook:
+                try:
+                    post_json(self.progress_webhook, payload)
+                except Exception as exc:
+                    print(f'WARNING: progress webhook failed: {exc}', file=sys.stderr)
+                    self.progress_webhook = None
+            if self.feishu_webhook:
+                try:
+                    post_json(self.feishu_webhook, build_feishu_payload(payload, secret=self.feishu_secret))
+                except Exception as exc:
+                    print(f'WARNING: feishu webhook failed: {exc}', file=sys.stderr)
+                    self.feishu_webhook = None
         if self.quiet:
             return
         overall = self.state.get('overall') or {}
@@ -72,6 +114,16 @@ class ProgressTracker:
             flush=True,
         )
 
+    def _build_webhook_payload(self) -> Dict[str, Any]:
+        payload = dict(self.state)
+        payload['mode'] = 'dcd_collect'
+        payload['model_name'] = self.state.get('series_name') or self.label
+        payload['current_page_info'] = {
+            'current_page': self.state.get('current_page', 0),
+            'page_range': self.state.get('page_range') or {},
+        }
+        return payload
+
     def update(self, **kwargs):
         self.state.update(kwargs)
         total = int(self.state.get('total') or 0)
@@ -80,6 +132,59 @@ class ProgressTracker:
         self.state['percent'] = percent
         self.state['overall'] = {'current': current, 'total': total, 'percent': percent}
         self.emit()
+
+
+def write_json_atomic(path: Path, payload: Dict[str, Any]):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + '.tmp')
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    tmp_path.replace(path)
+
+
+def post_json(url: str, payload: Dict[str, Any], timeout: int = 5):
+    data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+    req = urllib_request.Request(
+        url,
+        data=data,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    with urllib_request.urlopen(req, timeout=timeout) as resp:
+        resp.read()
+
+
+def make_feishu_signature(secret: str, timestamp: int) -> str:
+    string_to_sign = f'{timestamp}\n{secret}'
+    digest = hmac.new(string_to_sign.encode('utf-8'), digestmod=hashlib.sha256).digest()
+    return base64.b64encode(digest).decode('utf-8')
+
+
+def build_feishu_progress_text(payload: Dict[str, Any]) -> str:
+    percent = int(payload.get('percent', 0))
+    stage = payload.get('stage') or ''
+    current = int(payload.get('current_page', 0))
+    page_range = payload.get('page_range') or {}
+    page_end = int(page_range.get('end', 0) or 0)
+    message = payload.get('message') or ''
+    series_name = payload.get('series_name') or payload.get('model_name') or payload.get('label') or ''
+    lines = [f'懂车帝口碑 {percent}%｜{series_name}', f'{stage} · 第 {current}/{page_end} 页']
+    if message and message not in {stage, f'第 {current} 页'}:
+        lines.append(f'说明：{message}')
+    return '\n'.join(lines)
+
+
+def build_feishu_payload(payload: Dict[str, Any], *, secret: Optional[str] = None) -> Dict[str, Any]:
+    timestamp = int(time.time())
+    feishu_payload = {
+        'timestamp': str(timestamp),
+        'msg_type': 'text',
+        'content': {
+            'text': build_feishu_progress_text(payload),
+        },
+    }
+    if secret:
+        feishu_payload['sign'] = make_feishu_signature(secret, timestamp)
+    return feishu_payload
 
 import requests
 from openpyxl import Workbook, load_workbook
@@ -357,6 +462,9 @@ def main():
     parser.add_argument('--end-page', type=int, help='结束页；不传时自动探测')
     parser.add_argument('--output', help='输出 xlsx 路径；不传时默认用 DCD口碑_车型_日期.xlsx')
     parser.add_argument('--progress-file', help='进度 JSON 输出路径；默认与 output 同目录同名 .progress.json')
+    parser.add_argument('--progress-webhook', help='将进度状态 POST 到通用 webhook')
+    parser.add_argument('--feishu-webhook', help='将进度状态 POST 到飞书 incoming webhook')
+    parser.add_argument('--feishu-secret', help='飞书自定义机器人安全密钥，用于签名')
     parser.add_argument('--quiet', action='store_true', help='静默模式，仅写 progress json，不打印进度行')
     parser.add_argument('--retry-failed-pages', help='从 *.failed-pages.json 读取失败页，仅补抓这些页')
     parser.add_argument('--merge-into', help='将补抓结果合并进已有 Excel，按 来源链接 覆盖旧记录')
@@ -398,7 +506,14 @@ def main():
     output = args.output or default_output_name(series_name or str(series_id))
     out_path = Path(output).resolve()
     progress_path = Path(args.progress_file).resolve() if args.progress_file else out_path.with_suffix('.progress.json')
-    tracker = ProgressTracker(label=f'dcd:{series_id}', progress_path=progress_path, quiet=args.quiet)
+    tracker = ProgressTracker(
+        label=f'dcd:{series_id}',
+        progress_path=progress_path,
+        quiet=args.quiet,
+        progress_webhook=args.progress_webhook,
+        feishu_webhook=args.feishu_webhook,
+        feishu_secret=args.feishu_secret,
+    )
     target_pages = retry_pages or list(range(args.start_page, end_page + 1))
     total_steps = len(target_pages) + 2
     failed_page_list: List[Dict[str, Any]] = []
@@ -412,6 +527,8 @@ def main():
         failed_pages=failed_page_list,
         message='准备开始抓取懂车帝口碑' + ('（失败页补抓）' if retry_pages else ''),
     )
+    if series_name:
+        tracker.state['series_name'] = series_name
 
     success_pages = 0
     retry_total = 0
@@ -441,6 +558,7 @@ def main():
             success_pages += 1
             if not series_name:
                 series_name = meta.get('series_name', '')
+                tracker.state['series_name'] = series_name
             tracker.update(
                 stage='抓取页面',
                 current=current_step,

@@ -13,6 +13,7 @@
 - 同步生成 `.progress.json`
 - 同步生成 `.failed-pages.json`
 - 终端文本进度条，展示阶段 / 页码 / 成功重试失败 / 累计记录数
+- 支持把进度实时写入 JSON、推送到通用 webhook，或直连飞书 incoming webhook
 - 支持按失败页补抓：`--retry-failed-pages`
 - 支持把补抓结果合并进旧结果：`--merge-into`
 - 支持合并模式：`--merge-mode keep-extra|strict`
@@ -126,6 +127,19 @@ DCD口碑_风云X3_2026-03-27.failed-pages.json
 抓取页面 [########................] 总体 8/21 (38%) | 页码 8/20 | ok 7 retry 0 fail 0 rows 134 | 第 8 页
 ```
 
+如果要把进度写给对话框或前端轮询，可加：
+
+- `--progress-file /tmp/dcd.progress.json`
+
+如果要主动推送到通用 webhook，可加：
+
+- `--progress-webhook https://...`
+
+如果要直连飞书 incoming webhook，可加：
+
+- `--feishu-webhook https://...`
+- `--feishu-secret <secret>`
+
 ### 失败页补抓
 
 ```bash
@@ -199,12 +213,10 @@ python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
 
 ### v0.3.0
 
-计划补充：
+已完成：
 
-- 详情页补字段
-- 更细的车型/版本筛选
-- 更强的异常检测与重试策略
-- 面向批量任务的稳定性优化
+- 进度 webhook 直连支持
+- 飞书 incoming webhook 直连支持
 
 ## 仓库
 
