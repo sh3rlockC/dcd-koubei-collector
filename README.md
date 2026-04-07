@@ -32,6 +32,8 @@
   - 来源链接
   - 抓取页码
 
+导出结果旁会自动生成同名 `.validation.json`，进度则同时支持终端、`progress.json`、通用 webhook 和飞书 incoming webhook，方便对话框或前端直接读取。
+
 ## 目录结构
 
 ```text
