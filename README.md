@@ -188,35 +188,12 @@ python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
 - 更细的车型/版本筛选
 
 
-## 版本路线图
+## Release 内容
 
-### v0.1.0
+每个 Release 默认包含：
 
-已完成：
-
-- 懂车帝口碑分页抓取
-- 自动探测总页数
-- 默认文件名输出
-- Excel + validation.json 导出
-- 用户名 / 用户标签 / 评价全文等核心字段
-
-### v0.2.0
-
-已完成：
-
-- 文本进度条
-- `.progress.json` 输出
-- `.failed-pages.json` 输出
-- 失败页补抓
-- 合并旧结果
-- `keep-extra / strict` 两种 merge 模式
-
-### v0.3.0
-
-已完成：
-
-- 进度 webhook 直连支持
-- 飞书 incoming webhook 直连支持
+- `.skill` 包
+- GitHub 自动生成的源码压缩包
 
 ## 仓库
 
