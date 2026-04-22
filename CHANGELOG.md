@@ -19,4 +19,5 @@ The format is loosely based on Keep a Changelog and uses semantic-ish project ve
 
 - Add short, user-visible changes under `Unreleased` as work lands.
 - When publishing a release, move the relevant entries into a versioned section.
+- Keep GitHub Release notes aligned with the same entries so changelog and releases do not drift.
 - Prefer describing behavior changes instead of internal-only commit trivia.

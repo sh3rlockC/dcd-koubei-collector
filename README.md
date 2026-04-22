@@ -209,3 +209,10 @@ python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
 ## 仓库
 
 - GitHub: <https://github.com/sh3rlockC/dcd-koubei-collector>
+
+## Changelog & Releases
+
+- User-visible changes are tracked in [`CHANGELOG.md`](./CHANGELOG.md).
+- For a new release, update the `Unreleased` section first, then cut the versioned release.
+- GitHub Release notes should match the same user-visible changes, not just raw commit history.
+
