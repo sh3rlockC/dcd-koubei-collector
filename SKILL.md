@@ -164,6 +164,8 @@ description: 从懂车帝口碑页批量采集指定车型的用户评价全文�
 - 支持通过 `--merge-mode keep-extra|strict` 控制是否保留旧表中本轮未触及的历史记录
 - 推荐合并后输出到新文件（如 `_修复版.xlsx`），避免直接覆盖原始产物
 - 可通过 `--progress-file` 自定义进度文件路径
+- 可通过 `--progress-webhook` 直连通用 webhook
+- 可通过 `--feishu-webhook` 直连飞书 incoming webhook，若机器人开启签名可配 `--feishu-secret`
 - 可通过 `--quiet` 关闭终端进度输出，仅保留 `.progress.json`
 
 示例：

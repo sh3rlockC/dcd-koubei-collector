@@ -13,6 +13,7 @@
 - 同步生成 `.progress.json`
 - 同步生成 `.failed-pages.json`
 - 终端文本进度条，展示阶段 / 页码 / 成功重试失败 / 累计记录数
+- 支持把进度实时写入 JSON、推送到通用 webhook，或直连飞书 incoming webhook
 - 支持按失败页补抓：`--retry-failed-pages`
 - 支持把补抓结果合并进旧结果：`--merge-into`
 - 支持合并模式：`--merge-mode keep-extra|strict`
@@ -30,6 +31,8 @@
   - 评价全文
   - 来源链接
   - 抓取页码
+
+导出结果旁会自动生成同名 `.validation.json`，进度则同时支持终端、`progress.json`、通用 webhook 和飞书 incoming webhook，方便对话框或前端直接读取。
 
 ## 目录结构
 
@@ -126,6 +129,19 @@ DCD口碑_风云X3_2026-03-27.failed-pages.json
 抓取页面 [########................] 总体 8/21 (38%) | 页码 8/20 | ok 7 retry 0 fail 0 rows 134 | 第 8 页
 ```
 
+如果要把进度写给对话框或前端轮询，可加：
+
+- `--progress-file /tmp/dcd.progress.json`
+
+如果要主动推送到通用 webhook，可加：
+
+- `--progress-webhook https://...`
+
+如果要直连飞书 incoming webhook，可加：
+
+- `--feishu-webhook https://...`
+- `--feishu-secret <secret>`
+
 ### 失败页补抓
 
 ```bash
@@ -174,37 +190,12 @@ python3 skills/dcd-koubei-collector/scripts/export_dcd_koubei.py \
 - 更细的车型/版本筛选
 
 
-## 版本路线图
+## Release 内容
 
-### v0.1.0
+每个 Release 默认包含：
 
-已完成：
-
-- 懂车帝口碑分页抓取
-- 自动探测总页数
-- 默认文件名输出
-- Excel + validation.json 导出
-- 用户名 / 用户标签 / 评价全文等核心字段
-
-### v0.2.0
-
-已完成：
-
-- 文本进度条
-- `.progress.json` 输出
-- `.failed-pages.json` 输出
-- 失败页补抓
-- 合并旧结果
-- `keep-extra / strict` 两种 merge 模式
-
-### v0.3.0
-
-计划补充：
-
-- 详情页补字段
-- 更细的车型/版本筛选
-- 更强的异常检测与重试策略
-- 面向批量任务的稳定性优化
+- `.skill` 包
+- GitHub 自动生成的源码压缩包
 
 ## 仓库
 
