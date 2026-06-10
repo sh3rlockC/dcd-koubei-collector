@@ -438,6 +438,22 @@ def merge_rows(existing_rows: List[Dict[str, str]], new_rows: List[Dict[str, str
     return [merged[key] for key in order]
 
 
+def load_known_links(path: Path) -> set[str]:
+    return {line.strip() for line in path.read_text(encoding='utf-8').splitlines() if line.strip()}
+
+
+def filter_known_rows(rows: List[Dict[str, str]], known_links: set[str]) -> Tuple[List[Dict[str, str]], int]:
+    filtered: List[Dict[str, str]] = []
+    known_count = 0
+    for row in rows:
+        source_link = (row.get('来源链接') or '').strip()
+        if source_link and source_link in known_links:
+            known_count += 1
+            continue
+        filtered.append(row)
+    return filtered, known_count
+
+
 def write_validation_report(path: Path, report: Dict[str, Any]):
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
 
@@ -469,6 +485,9 @@ def main():
     parser.add_argument('--retry-failed-pages', help='从 *.failed-pages.json 读取失败页，仅补抓这些页')
     parser.add_argument('--merge-into', help='将补抓结果合并进已有 Excel，按 来源链接 覆盖旧记录')
     parser.add_argument('--merge-mode', choices=['keep-extra', 'strict'], default='keep-extra', help='merge-into 时的合并模式：keep-extra 保留旧表其他记录；strict 仅保留本轮新结果')
+    parser.add_argument('--known-links-file', help='历史语料来源链接清单；传入后仅导出新增链接')
+    parser.add_argument('--max-scan-pages', type=int, default=10, help='增量采集最多扫描页数')
+    parser.add_argument('--stop-after-known-pages', type=int, default=2, help='连续多少页无新增后停止')
     args = parser.parse_args()
 
     if not args.series_id and not args.url:
@@ -515,6 +534,12 @@ def main():
         feishu_secret=args.feishu_secret,
     )
     target_pages = retry_pages or list(range(args.start_page, end_page + 1))
+    known_links: set[str] = set()
+    incremental_enabled = bool(args.known_links_file and not retry_pages)
+    if incremental_enabled:
+        known_links = load_known_links(Path(args.known_links_file).resolve())
+        if args.max_scan_pages and args.max_scan_pages > 0:
+            target_pages = target_pages[: args.max_scan_pages]
     total_steps = len(target_pages) + 2
     failed_page_list: List[Dict[str, Any]] = []
     tracker.update(
@@ -533,7 +558,11 @@ def main():
     success_pages = 0
     retry_total = 0
     failed_pages = 0
+    pages_scanned = 0
+    consecutive_known_pages = 0
+    stop_reason = 'end_page'
     for index, page in enumerate(target_pages, start=1):
+        pages_scanned += 1
         current_step = index
         tracker.update(
             stage='抓取页面',
@@ -550,6 +579,9 @@ def main():
         )
         try:
             rows, bad, meta, retry_count = collect_page(series_id, page)
+            known_count = 0
+            if incremental_enabled:
+                rows, known_count = filter_known_rows(rows, known_links)
             all_rows.extend(rows)
             anomalies.extend(bad)
             page_counts[str(page)] = len(rows)
@@ -572,6 +604,14 @@ def main():
                 failed_pages=failed_page_list,
                 message=f'第 {page} 页完成，新增 {len(rows)} 条',
             )
+            if incremental_enabled:
+                if len(rows) == 0 and known_count > 0:
+                    consecutive_known_pages += 1
+                else:
+                    consecutive_known_pages = 0
+                if args.stop_after_known_pages and consecutive_known_pages >= args.stop_after_known_pages:
+                    stop_reason = 'known_pages'
+                    break
         except Exception as e:
             failure = {
                 'type': 'page_fetch_failed',
@@ -596,6 +636,8 @@ def main():
                 failed_pages=failed_page_list,
                 message=f'第 {page} 页失败',
             )
+    if incremental_enabled and stop_reason == 'end_page' and pages_scanned < (end_page - args.start_page + 1):
+        stop_reason = 'max_scan_pages'
     final_rows = all_rows
     merge_summary = None
     if args.merge_into:
@@ -640,6 +682,15 @@ def main():
         'total_rows': len(final_rows),
         'page_counts': page_counts,
         'page_meta': page_meta,
+        'incremental': {
+            'enabled': incremental_enabled,
+            'known_links_count': len(known_links),
+            'pages_scanned': pages_scanned,
+            'max_scan_pages': args.max_scan_pages if incremental_enabled else None,
+            'stop_after_known_pages': args.stop_after_known_pages if incremental_enabled else None,
+            'stop_reason': stop_reason if incremental_enabled else None,
+            'new_rows': len(all_rows),
+        },
         'anomaly_count': len(anomalies),
         'anomalies': anomalies,
         'merge': merge_summary,
